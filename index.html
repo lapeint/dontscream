@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screaming Challenge</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: black;
+        }
+
+        #start-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 3;
+            font-size: 50px;
+            font-family: Cascadia Code;
+            color: greenyellow;
+            border: solid 1px greenyellow;
+            padding: 50px;
+            border-radius: 20px;
+            
+        }
+
+        #video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            z-index: 1;
+        }
+
+        #microphone-indicator,
+        #decibel-indicator {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: greenyellow;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 2;
+            justify-content: space-between;
+            display: none;
+            font-family: Cascadia Code;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+        }
+
+        button {
+            margin-top: 10px;
+            color: greenyellow;
+            background-color: black;
+            font-family: Cascadia Code;
+            border: none;
+            font-size: 30px;
+            text-decoration:underline
+        }
+    </style>
+</head>
+<body>
+    <div id="start-container">
+        <p>Are you ready?</p>
+        <button onclick="startGame()">Yes</button>
+        <button onclick="reduceMicrophoneVolume()">Reduce Microphone Volume (Debug)</button>
+    </div>
+
+    <div id="video-container">
+        <div id="microphone-indicator">🎤 Microphone On</div>
+        <div id="decibel-indicator">Decibel Level: 0 dB</div>
+        <video id="myVideo" autoplay   controls >
+            <source src="./video2.mp4"  type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <script>
+        let countdown;
+        let audioContext;
+        let analyser;
+        let microphone;
+
+        function startGame() {
+            document.getElementById("start-container").style.display = "none";
+            document.getElementById("video-container").style.display = "block";
+            document.getElementById("microphone-indicator").style.display = "none";
+            document.getElementById("decibel-indicator").style.display = "block";
+
+            // Set a timer for 18 minutes
+            countdown = setTimeout(() => {
+                document.getElementById("video-container").style.display = "none";
+                document.getElementById("microphone-indicator").style.display = "none";
+                document.getElementById("decibel-indicator").style.display = "none";
+                alert("Time's up! You lose. Restart from 0?");
+                resetGame();
+            }, 18 * 60 * 1000);
+
+            // Check for screaming
+            startListening();
+        }
+
+        function resetGame() {
+            clearTimeout(countdown);
+            document.getElementById("start-container").style.display = "block";
+        }
+
+        function startListening() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function (stream) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    microphone.connect(analyser);
+                    analyser.fftSize = 256;
+
+                    const bufferLength = analyser.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+
+                    analyser.getByteFrequencyData(dataArray);
+
+                    function checkForScream() {
+                        analyser.getByteFrequencyData(dataArray);
+
+                        // Check if the user is screaming (simplified logic)
+                        const isScreaming = dataArray.some(value => value > 200);
+
+                        if (isScreaming) {
+                            document.getElementById("video-container").style.display = "none";
+                            document.getElementById("microphone-indicator").style.display = "none";
+                            document.getElementById("decibel-indicator").style.display = "none";
+                            alert("You screamed! You lose. Restart from 0?");
+                            resetGame();
+                        } else {
+                            // Repeat the check
+                            requestAnimationFrame(checkForScream);
+                        }
+                    }
+
+                    function updateDecibelIndicator() {
+                        analyser.getByteFrequencyData(dataArray);
+                        const average = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+                        const decibelLevel = 20 * Math.log10(average / 255 + 1); // Convert to decibels
+
+                        document.getElementById("decibel-indicator").textContent = `Decibel Level: ${decibelLevel.toFixed(2)} dB`;
+                        requestAnimationFrame(updateDecibelIndicator);
+                    }
+
+                    // Start checking for screams
+                    checkForScream();
+
+                    // Start updating the decibel indicator
+                    updateDecibelIndicator();
+                })
+                .catch(function (err) {
+                    console.error("Error accessing microphone:", err);
+                });
+        }
+
+        function reduceMicrophoneVolume() {
+            if (audioContext && microphone) {
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = 0.1; // Adjust this value to reduce volume
+                microphone.disconnect();
+                microphone.connect(gainNode);
+                gainNode.connect(analyser);
+            }
+        }
+    </script>
+</body>
+</html>
